@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import type { DownloadItem } from '@/types/models';
 import { StatusBadge, ProgressBar } from '@/components/common';
 import { formatBytes, formatSpeed, formatEta } from '@/services';
 import { cn } from '@/lib/utils';
 import {
-  Pause, Play, X, RotateCcw, Trash2, MoreHorizontal,
+  Pause, Play, X, RotateCcw, Trash2, GripVertical,
 } from 'lucide-react';
 
 interface QueueTableProps {
@@ -14,34 +14,95 @@ interface QueueTableProps {
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
   onRemove: (id: string) => void;
+  onReorder?: (fromIndex: number, toIndex: number) => void;
 }
 
-export function QueueTable({ items, onPause, onResume, onCancel, onRetry, onRemove }: QueueTableProps) {
+export function QueueTable({ items, onPause, onResume, onCancel, onRetry, onRemove, onReorder }: QueueTableProps) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const dragNodeRef = useRef<HTMLDivElement | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    // Make the drag image slightly transparent
+    if (e.currentTarget instanceof HTMLElement) {
+      dragNodeRef.current = e.currentTarget as HTMLDivElement;
+      e.currentTarget.style.opacity = '0.5';
+    }
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragNodeRef.current) {
+      dragNodeRef.current.style.opacity = '1';
+    }
+    setDragIndex(null);
+    setOverIndex(null);
+    dragNodeRef.current = null;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverIndex(index);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    const fromIndex = dragIndex;
+    if (fromIndex !== null && fromIndex !== toIndex && onReorder) {
+      onReorder(fromIndex, toIndex);
+    }
+    setDragIndex(null);
+    setOverIndex(null);
+  }, [dragIndex, onReorder]);
+
   return (
     <div className="space-y-1.5">
-      {items.map((item, index) => (
-        <QueueRow
-          key={item.id}
-          item={item}
-          index={index}
-          onPause={onPause}
-          onResume={onResume}
-          onCancel={onCancel}
-          onRetry={onRetry}
-          onRemove={onRemove}
-        />
-      ))}
+      {items.map((item, index) => {
+        const isDropTarget = overIndex === index && dragIndex !== null && dragIndex !== index;
+        const isBeingDragged = dragIndex === index;
+
+        return (
+          <div
+            key={item.id}
+            draggable={!!onReorder}
+            onDragStart={(e) => handleDragStart(e, index)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => handleDragOver(e, index)}
+            onDrop={(e) => handleDrop(e, index)}
+            className={cn(
+              'transition-all duration-200',
+              isDropTarget && dragIndex !== null && dragIndex < index && 'translate-y-1 border-b-2 border-b-primary/40',
+              isDropTarget && dragIndex !== null && dragIndex > index && '-translate-y-1 border-t-2 border-t-primary/40',
+              isBeingDragged && 'opacity-50 scale-[0.98]',
+            )}
+          >
+            <QueueRow
+              item={item}
+              index={index}
+              onPause={onPause}
+              onResume={onResume}
+              onCancel={onCancel}
+              onRetry={onRetry}
+              onRemove={onRemove}
+              showDragHandle={!!onReorder}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function QueueRow({
-  item, index, onPause, onResume, onCancel, onRetry, onRemove,
+  item, index, onPause, onResume, onCancel, onRetry, onRemove, showDragHandle,
 }: {
   item: DownloadItem; index: number;
   onPause: (id: string) => void; onResume: (id: string) => void;
   onCancel: (id: string) => void; onRetry: (id: string) => void;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => void; showDragHandle: boolean;
 }) {
   const isActive = item.status === 'downloading';
   const isPaused = item.status === 'paused';
@@ -54,6 +115,16 @@ function QueueRow({
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="flex items-start gap-3">
+        {/* Drag Handle */}
+        {showDragHandle && (
+          <div
+            className="flex items-center justify-center w-5 h-12 shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+            title="Drag to reorder"
+          >
+            <GripVertical className="w-4 h-4" strokeWidth={1.5} />
+          </div>
+        )}
+
         {/* Thumbnail */}
         <img
           src={item.metadata.thumbnail}

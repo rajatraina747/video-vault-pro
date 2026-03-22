@@ -227,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <SettingsContext.Provider value={{ preferences: settings, updatePreference, resetToDefaults }}>
-      <QueueContext.Provider value={{ items: queue, addToQueue, removeFromQueue, pauseDownload, resumeDownload, cancelDownload, retryDownload, clearCompleted, startAll, pauseAll }}>
+      <QueueContext.Provider value={{ items: queue, addToQueue, removeFromQueue, pauseDownload, resumeDownload, cancelDownload, retryDownload, clearCompleted, startAll, pauseAll, reorderQueue }}>
         <HistoryContext.Provider value={{ items: history, removeFromHistory, clearHistory }}>
           {children}
         </HistoryContext.Provider>
