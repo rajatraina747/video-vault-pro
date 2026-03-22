@@ -15,6 +15,7 @@ interface QueueActions {
   clearCompleted: () => void;
   startAll: () => void;
   pauseAll: () => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
 }
 
 interface HistoryActions {
@@ -203,6 +204,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ));
   }, [queue]);
 
+  const reorderQueue = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  }, []);
+
   const removeFromHistory = useCallback((id: string) => {
     setHistory(prev => prev.filter(i => i.id !== id));
   }, []);
@@ -217,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <SettingsContext.Provider value={{ preferences: settings, updatePreference, resetToDefaults }}>
-      <QueueContext.Provider value={{ items: queue, addToQueue, removeFromQueue, pauseDownload, resumeDownload, cancelDownload, retryDownload, clearCompleted, startAll, pauseAll }}>
+      <QueueContext.Provider value={{ items: queue, addToQueue, removeFromQueue, pauseDownload, resumeDownload, cancelDownload, retryDownload, clearCompleted, startAll, pauseAll, reorderQueue }}>
         <HistoryContext.Provider value={{ items: history, removeFromHistory, clearHistory }}>
           {children}
         </HistoryContext.Provider>
