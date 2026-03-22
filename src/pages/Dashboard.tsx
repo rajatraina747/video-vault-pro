@@ -3,10 +3,10 @@ import { useQueue } from '@/stores/AppProvider';
 import { UrlInput } from '@/components/dashboard/UrlInput';
 import { MediaDetailsModal } from '@/components/media-details/MediaDetailsModal';
 import { EmptyState, Panel, StatusBadge, ProgressBar } from '@/components/common';
-import { DEFAULT_PRESETS, type MediaMetadata, type DownloadItem } from '@/types/models';
-import { mockParseUrl, formatBytes, formatDuration } from '@/services';
+import { DEFAULT_PRESETS, type MediaMetadata, type DownloadItem, DEFAULT_PREFERENCES } from '@/types/models';
+import { mockParseUrl, formatBytes, formatDuration, generateId } from '@/services';
 import {
-  ArrowDownToLine, Sparkles, Clock, Zap,
+  ArrowDownToLine, Sparkles, Clock, Zap, Loader2,
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [isParsing, setIsParsing] = useState(false);
   const [parsedMetadata, setParsedMetadata] = useState<MediaMetadata | null>(null);
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number } | null>(null);
 
   const activeDownloads = queueItems.filter(i => i.status === 'downloading');
 
@@ -32,6 +33,44 @@ export default function Dashboard() {
     }
   }, []);
 
+  const handleBatchSubmit = useCallback(async (urls: string[]) => {
+    setParseError(null);
+    setBatchProgress({ total: urls.length, done: 0 });
+
+    for (let i = 0; i < urls.length; i++) {
+      try {
+        const metadata = await mockParseUrl(urls[i]);
+        // Auto-add to queue with default format
+        const format = metadata.formats[1] || metadata.formats[0];
+        const item: DownloadItem = {
+          id: generateId(),
+          metadata,
+          settings: {
+            format,
+            destination: DEFAULT_PREFERENCES.defaultSaveFolder,
+            filename: metadata.title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_'),
+            priority: 'normal',
+            retryCount: DEFAULT_PREFERENCES.defaultRetryCount,
+            startImmediately: true,
+          },
+          status: 'queued',
+          progress: 0,
+          speed: 0,
+          eta: 0,
+          downloadedBytes: 0,
+          totalBytes: format?.fileSize || 500_000_000,
+          retryAttempt: 0,
+        };
+        addToQueue(item);
+      } catch {
+        // Skip failed URLs in batch
+      }
+      setBatchProgress({ total: urls.length, done: i + 1 });
+    }
+
+    setBatchProgress(null);
+  }, [addToQueue]);
+
   const handleAddToQueue = useCallback((item: DownloadItem) => {
     addToQueue(item);
     setParsedMetadata(null);
@@ -45,7 +84,30 @@ export default function Dashboard() {
       </div>
 
       {/* URL Input */}
-      <UrlInput onSubmit={handleUrlSubmit} isLoading={isParsing} error={parseError} />
+      <UrlInput
+        onSubmit={handleUrlSubmit}
+        onBatchSubmit={handleBatchSubmit}
+        isLoading={isParsing}
+        error={parseError}
+      />
+
+      {/* Batch progress indicator */}
+      {batchProgress && (
+        <div className="mt-3 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-primary/8 border border-primary/20 animate-fade-in">
+          <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground">
+              Parsing batch… {batchProgress.done} / {batchProgress.total}
+            </p>
+            <div className="mt-1.5 w-full h-1 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                style={{ width: `${(batchProgress.done / batchProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 mt-6">
         {/* Quick Presets */}

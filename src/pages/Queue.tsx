@@ -46,6 +46,7 @@ export default function Queue() {
           onCancel={cancelDownload}
           onRetry={retryDownload}
           onRemove={removeFromQueue}
+          onReorder={reorderQueue}
         />
       )}
     </div>
